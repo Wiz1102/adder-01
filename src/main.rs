@@ -3,21 +3,21 @@
 // }
 
 
-/// Compile a source program into a string of x86-64 assembly
-fn compile(program: String) -> String {
-    let num = program.trim().parse::<i32>().unwrap();
-    return format!("mov rax, {}", num);
-}
-
 // fn main() {
 //     let program = "37";
 //     let compiled = compile(String::from(program));
 //     println!("{}", compiled);
 // }
 
+
+
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
+use sexp::*;
+use sexp::Atom::*;
+
+
 
 enum Expr {
     Num(i32),
@@ -26,12 +26,42 @@ enum Expr {
     Negate(Box<Expr>)
 }
 
-fn eval(e: &Expr) -> i32 {
+// fn eval(e: &Expr) -> i32 {
+//     match e {
+//         Expr::Num(n) => *n,
+//         Expr::Add1(e1) => eval(e1) + 1,
+//         Expr::Sub1(e1) => eval(e1) - 1,
+//         Expr::Negate(e1) => -eval(e1)
+//     }
+// }
+
+fn parse_expr(s: &Sexp) -> Expr {
+    match s {
+        Sexp::Atom(I(n)) => Expr::Num(i32::try_from(*n).unwrap()),
+        Sexp::List(vec) => {
+            match &vec[..] {
+                [Sexp::Atom(S(op)), e] if op == "add1" => Expr::Add1(Box::new(parse_expr(e))),
+                [Sexp::Atom(S(op)), e] if op == "sub1" => Expr::Sub1(Box::new(parse_expr(e))),
+                [Sexp::Atom(S(op)), e] if op == "negate" => Expr::Negate(Box::new(parse_expr(e))),
+                _ => panic!("parse error"),
+            }
+        },
+        _ => panic!("parse error"),
+    }
+}
+
+/// Compile a source program into a string of x86-64 assembly
+// fn compile(program: String) -> String {
+//     let num = program.trim().parse::<i32>().unwrap();
+//     return format!("mov rax, {}", num);
+// }
+
+fn compile_expr(e: &Expr) -> String {
     match e {
-        Expr::Num(n) => *n,
-        Expr::Add1(e1) => eval(e1) + 1,
-        Expr::Sub1(e1) => eval(e1) - 1,
-        Expr::Negate(e1) => -eval(e1)
+        Expr::Num(n) => format!("mov rax, {}", *n),
+        Expr::Add1(subexpr) => compile_expr(subexpr) + "\nadd rax, 1",
+        Expr::Sub1(subexpr) => compile_expr(subexpr) + "\nsub rax, 1",
+        Expr::Negate(subexpr) => compile_expr(subexpr) + "\nneg rax",
     }
 }
 
@@ -46,7 +76,9 @@ fn main() -> std::io::Result<()> {
     let mut in_contents = String::new();
     in_file.read_to_string(&mut in_contents)?;
 
-    let result = compile(in_contents);
+    let expr = parse_expr(&parse(&in_contents).unwrap());
+    let result = compile_expr(&expr);
+
 
     let asm_program = format!("
 section .text
@@ -100,3 +132,5 @@ mod tests {
 }
 
 
+
+ 
